@@ -5,7 +5,6 @@ frontend/dist/
 # Local credentials and runtime state
 .env
 .env.*
-!.env.example
 data/
 *.sqlite*
 *.pem

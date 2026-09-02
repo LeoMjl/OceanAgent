@@ -20,7 +20,7 @@ OceanAgent 是基于 Pi Agent SDK 的海洋科研智能体。它将本地 `Ocean
 - 首次使用时在网页“设置”中配置至少一个模型供应商和模型。
 - 默认知识库目录：`Ocean-RAG`。
 
-模型、API Key、默认模型、远程连接和嵌入模型参数均保存在 SQLite。`.env` 文件不会被自动读取；端口、数据库路径等进程级覆盖项可通过系统环境变量注入，示例见 `.env.example`。
+模型、API Key、默认模型、远程连接和嵌入模型参数均保存在 SQLite。
 
 ## 启动
 
@@ -51,26 +51,3 @@ npm test
 npm run typecheck
 npm run build
 ```
-
-## 主要目录
-
-```text
-.pi/SYSTEM.md                 OceanAgent 系统规则
-frontend/src/                 React 会话树与科研工作台
-src/agent/                    Pi 会话、工具和运行编排
-src/db/                       SQLite schema 与 repositories
-src/rag/                      Ocean-RAG 解析、索引和检索
-src/server/                   Fastify API、SSE 与审批路由
-data/ocean-agent.sqlite       本地运行数据库（不提交）
-```
-
-## 安全边界
-
-- Pi 内置高权限工具未暴露给模型，当前使用显式工具白名单。
-- 规划审批前不执行；规划审批后只执行当前工具真实支持的工作。
-- 官方网页检索使用域名硬过滤；检索失败时不会用名称相似的无关网页替代。
-- 模型与远程服务器凭据使用 Windows DPAPI 加密后写入 SQLite，不读取 `.env` 中的凭据。
-
-## 隐私与分发
-
-公开仓库只包含源码、构建配置、`.pi/SYSTEM.md` 和空的 `Ocean-RAG/cards/` 目录，不包含知识库内容。不要提交 `.env`、`data/`、SQLite、日志、缓存、运行产物、远程服务器脚本、实验目录或知识卡。克隆后的首次运行会创建全新的本地数据库，使用者需要自行配置模型、远程连接和知识库。
