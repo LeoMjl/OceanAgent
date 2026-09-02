@@ -1,0 +1,43 @@
+node_modules/
+dist/
+frontend/dist/
+
+# Local credentials and runtime state
+.env
+.env.*
+!.env.example
+data/
+*.sqlite*
+*.pem
+*.key
+*.pfx
+*.log
+
+# Local caches and generated artifacts
+.cache/
+.artifact_work/
+.release/
+__pycache__/
+artifacts/
+outputs/
+tmp/
+*.tgz
+*.zip
+
+# Ocean-RAG is private; keep only the empty cards directory marker
+Ocean-RAG/cards/*
+!Ocean-RAG/cards/.gitkeep
+Ocean-RAG/candidates/
+Ocean-RAG/logs/
+Ocean-RAG/review/
+Ocean-RAG/state/
+Ocean-RAG/tmp/
+
+# Unrelated local experiments and QA captures
+Paper-ocean/
+pi/
+tc_track_forecast/
+check_remote.py
+setup_remote.py
+design-qa*.png
+qa-*.png
