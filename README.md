@@ -49,3 +49,7 @@ npm test
 npm run typecheck
 npm run build
 ```
+
+## 许可
+
+Copyright © 2026 LeoMjl。本项目采用 [PolyForm Noncommercial License 1.0.0](LICENSE)，仅允许非商业用途；商业使用须事先获得版权所有者的书面授权。

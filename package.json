@@ -1,6 +1,7 @@
 {
   "name": "ocean-agent",
   "version": "0.1.0",
+  "license": "PolyForm-Noncommercial-1.0.0",
   "private": true,
   "type": "module",
   "files": [
@@ -8,6 +9,8 @@
     "dist/**/*.js",
     "frontend/dist/**",
     "Ocean-RAG/cards/.gitkeep",
+    "LICENSE",
+    "NOTICE",
     "README.md"
   ],
   "engines": {
