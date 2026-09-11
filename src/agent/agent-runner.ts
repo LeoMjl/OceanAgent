@@ -13,6 +13,7 @@ import { RunEventBus } from "../events/run-event-bus.js";
 import { RagService } from "../rag/rag-service.js";
 import { OfficialWebSearch } from "../web-search.js";
 import { ProjectCredentialVault } from "../projects/project-credential-vault.js";
+import { chooseAssistantText, extractAssistantText } from "./assistant-output.js";
 import { formatHistory } from "./history.js";
 import { renderTerminalAction } from "./render-action.js";
 import { OceanSessionFactory } from "./session-factory.js";
@@ -103,6 +104,9 @@ export class OceanAgentRunner {
       : undefined;
     const approvedPlan = approvedPlanId ? this.plans.get(approvedPlanId) : null;
     let assistantText = "";
+    const completedAssistantTexts: string[] = [];
+    let lastAssistantStopReason: string | undefined;
+    let lastAssistantError: string | undefined;
     let terminalAction: TerminalAction | undefined;
     const citationKeys = new Set<string>();
     const citationCounts = { ocean_rag: 0, web: 0 };
@@ -198,6 +202,11 @@ export class OceanAgentRunner {
           } else if (update.type === "text_start") {
             publishProgress("正在整理阶段结果");
           }
+        } else if (event.type === "message_end" && event.message.role === "assistant") {
+          const completedText = extractAssistantText(event.message.content);
+          if (completedText.trim()) completedAssistantTexts.push(completedText);
+          lastAssistantStopReason = event.message.stopReason;
+          lastAssistantError = event.message.errorMessage;
         } else if (event.type === "turn_start") {
           publishProgress("正在分析下一步");
         } else if (event.type === "tool_execution_start") {
@@ -244,10 +253,19 @@ export class OceanAgentRunner {
         `已批准规划：${JSON.stringify(approvedPlan)}`,
       ].join("\n") : userNode.content;
       await session.prompt(prompt);
+      const finalText = chooseAssistantText(completedAssistantTexts, assistantText);
+      if (!terminalAction && !finalText && !active.abortReason) {
+        const detail = lastAssistantError
+          ? `：${lastAssistantError}`
+          : lastAssistantStopReason
+            ? `（停止原因：${lastAssistantStopReason}）`
+            : "";
+        throw new Error(`模型 ${run.model} 返回了空响应${detail}。请在设置中重新获取模型列表或切换模型后重试。`);
+      }
       await this.finishRun(
         runId,
         userNode.id,
-        assistantText,
+        finalText,
         terminalAction,
         active.abortReason,
         approvedPlanId,
