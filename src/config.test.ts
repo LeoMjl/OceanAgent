@@ -1,6 +1,7 @@
 import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { dirname, join, resolve } from "node:path";
+import { fileURLToPath } from "node:url";
 import { afterEach, describe, expect, it } from "vitest";
 import { loadConfig } from "./config.js";
 
@@ -26,5 +27,14 @@ describe("loadConfig", () => {
       if (previousPort === undefined) delete process.env.PORT;
       else process.env.PORT = previousPort;
     }
+  });
+
+  it("anchors persistent paths to the installation directory by default", () => {
+    const expectedRoot = resolve(dirname(fileURLToPath(import.meta.url)), "..");
+    const config = loadConfig();
+
+    expect(config.rootDir).toBe(expectedRoot);
+    expect(config.databasePath).toBe(join(expectedRoot, "data", "ocean-agent.sqlite"));
+    expect(config.ragRoot).toBe(join(expectedRoot, "Ocean-RAG"));
   });
 });

@@ -1,4 +1,10 @@
-import { resolve } from "node:path";
+import { fileURLToPath } from "node:url";
+import { dirname, resolve } from "node:path";
+
+// Keep persistent application data anchored to the installation directory.
+// process.cwd() changes when OceanAgent is launched from a shortcut, another
+// terminal directory, or an absolute `node .../dist/server.js` command.
+const APPLICATION_ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 
 function intFromEnv(name: string, fallback: number): number {
   const value = Number.parseInt(process.env[name] ?? "", 10);
@@ -28,7 +34,7 @@ export interface AppConfig {
   };
 }
 
-export function loadConfig(rootDir = process.cwd()): AppConfig {
+export function loadConfig(rootDir = APPLICATION_ROOT): AppConfig {
   return {
     rootDir,
     host: process.env.HOST ?? "127.0.0.1",
