@@ -1,0 +1,6 @@
+numpy>=1.26
+pandas>=2.0
+xarray>=2024.1
+netCDF4>=1.6
+matplotlib>=3.8
+requests>=2.31

@@ -1,8 +1,10 @@
 import { useEffect, useMemo, useRef } from "react";
-import { CheckCircle, CircleNotch, Database, ListChecks, WarningCircle } from "@phosphor-icons/react";
+import { CheckCircle, CircleNotch, Database, ListChecks, WarningCircle, Robot } from "@phosphor-icons/react";
 import type { ConversationDetail, HealthStatus, ResearchPlan } from "../api";
-import type { ResearchActivity } from "../useOceanAgent";
+import { toolLabel, type ResearchActivity } from "../useOceanAgent";
 import { shortText } from "../tree";
+import { savedExecutionActivities } from "./execution-history";
+import { runningSubagents } from "./subagent-activity";
 
 interface EvidencePanelProps {
   detail: ConversationDetail | null;
@@ -29,8 +31,11 @@ function ProgressIcon({ status }: { status: ResearchActivity["status"] }) {
   return <CheckCircle weight="fill" />;
 }
 
-export function EvidencePanel({ detail, livePlan, activities, busy, status, ragStatus, onPlanAction }: EvidencePanelProps) {
+export function EvidencePanel({ detail, livePlan, activities: liveActivities, busy, status, ragStatus, onPlanAction }: EvidencePanelProps) {
   const endRef = useRef<HTMLDivElement>(null);
+  const savedActivities = useMemo(() => savedExecutionActivities(detail), [detail]);
+  const activities = busy ? liveActivities : savedActivities;
+  const activeChildren = useMemo(() => runningSubagents(liveActivities, busy), [liveActivities, busy]);
   const plan = useMemo(() => {
     const stored = detail?.plans ?? [];
     const plans = livePlan ? [livePlan, ...stored.filter((item) => item.id !== livePlan.id)] : stored;
@@ -52,6 +57,13 @@ export function EvidencePanel({ detail, livePlan, activities, busy, status, ragS
       <section className="research-assets">
         <header><div><span className="eyebrow">ASSETS</span><h2>科研资产</h2></div><i>{ragStatus ? (ragStatus.credentialConfigured ? "在线" : "待配置") : "连接中"}</i></header>
         <div className="asset-row"><span><Database weight="duotone" /></span><div><b>Ocean-RAG</b><small>{ragStatus?.documents ?? "—"} 条知识卡 · {ragStatus?.credentialConfigured ? (ragStatus.embeddingModel ?? "向量索引") : "请配置阿里云模型"}</small></div></div>
+        {activeChildren.length > 0 && <div className="active-subagents" aria-live="polite">
+          <div className="active-subagents-title">正在运行的子智能体 <span>{activeChildren.length}</span></div>
+          {activeChildren.map((child, index) => <details className="active-subagent" key={child.id}>
+            <summary><Robot className={`subagent-color-${index % 3}`} weight="duotone" /><b>{child.name}</b><CircleNotch className="spin" /></summary>
+            <p>{child.task}</p>
+          </details>)}
+        </div>}
       </section>
       <section className="research-widget">
         <header>
@@ -80,7 +92,7 @@ export function EvidencePanel({ detail, livePlan, activities, busy, status, ragS
             {activities.length ? activities.map((item) => (
               <div className={`widget-progress-item ${item.status}`} key={item.id}>
                 <ProgressIcon status={item.status} />
-                <div><b>{item.label}</b>{item.detail && <small>{shortText(item.detail, 52)}</small>}</div>
+                <div><b>{item.kind !== "tool" ? shortText(item.text ?? "阶段说明", 52) : toolLabel(item.toolName ?? "工具")}</b>{item.detail && <small>{shortText(item.detail, 52)}</small>}</div>
               </div>
             )) : (
               <div className="widget-empty"><ListChecks /><p>{plan ? STATUS_LABEL[plan.status] : "发送问题后，这里会显示规划或执行进度。"}</p></div>

@@ -23,7 +23,9 @@ export function registerPlanRoutes(server: FastifyInstance, context: AppContext)
       content: `已确认科研规划 v${plan.version}，请开始执行。`,
       metadata: { approvedPlanId: plan.id },
     });
-    const previousModel = context.runs.latestForConversation(plan.conversationId)?.model;
+    const caseModel = context.conversations.getNode(plan.nodeId)?.metadata.caseModel;
+    const previousModel = context.runs.latestForConversation(plan.conversationId)?.model
+      ?? (typeof caseModel === "string" ? caseModel : undefined);
     const run = context.runs.create(
       plan.conversationId,
       userNode.id,

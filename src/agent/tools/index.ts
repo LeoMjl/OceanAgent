@@ -18,6 +18,8 @@ export const OCEAN_TOOL_NAMES = [
   "request_clarification",
   "propose_research_plan",
   "run_remote_command",
+  "subagent",
+  "complete_research_plan",
 ];
 
 export const PI_CORE_TOOL_NAMES = ["read", "bash", "edit", "write"] as const;

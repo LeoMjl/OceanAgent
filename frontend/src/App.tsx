@@ -44,6 +44,7 @@ export default function App() {
         selectedModel={ocean.selectedModel}
         onModelChange={(model) => void ocean.chooseModel(model)}
         onSend={(content) => void ocean.sendMessage(content)}
+        onSstCase={ocean.activateSstCase}
         onClarify={(nodeId, content) => void ocean.submitClarification(nodeId, content)}
         onAbort={() => void ocean.abortRun()}
       />

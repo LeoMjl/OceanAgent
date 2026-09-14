@@ -37,13 +37,14 @@ export class OceanSessionFactory {
     cwd = this.config.rootDir,
     activeToolNames: readonly string[] = ACTIVE_TOOL_NAMES,
     modelValue?: string,
+    additionalSystemPrompt?: string,
   ) {
     const agentDir = resolve(this.config.rootDir, "data/pi-runtime");
     await mkdir(agentDir, { recursive: true });
     const loader = new DefaultResourceLoader({
       cwd,
       agentDir,
-      systemPromptOverride: () => this.systemPrompt,
+      systemPromptOverride: () => [this.systemPrompt, additionalSystemPrompt].filter(Boolean).join("\n\n"),
       appendSystemPromptOverride: () => [],
       noContextFiles: true,
       noSkills: true,

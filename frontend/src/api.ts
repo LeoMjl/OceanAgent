@@ -26,6 +26,7 @@ export interface ConversationDetail {
   plans: ResearchPlan[];
   citations: Record<string, Citation[]>;
   traces: Record<string, ToolTrace[]>;
+  activities?: Record<string, import("../../src/run-timeline").RunActivity[]>;
 }
 
 export interface HealthStatus {
@@ -57,6 +58,11 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
 }
 
 export const api = {
+  activateSstCase: (model: ModelReference | null) => request<{ conversationId: string; run: AgentRun; eventsUrl: string }>(
+    "/api/research-cases/south-china-sea-sst/activate", {
+      method: "POST", body: JSON.stringify({ model: model ?? undefined }),
+    },
+  ),
   health: () => request<HealthStatus>("/api/health"),
   getModelSettings: () => request<ModelSettingsState>("/api/model-settings"),
   discoverProviderModels: (providerId: string, apiKey?: string) => request<ModelDiscoveryResult>(
@@ -157,6 +163,7 @@ const EVENT_TYPES: StreamEvent["type"][] = [
   "run.started",
   "run.progress",
   "message.delta",
+  "message.completed",
   "tool.started",
   "tool.progress",
   "tool.completed",

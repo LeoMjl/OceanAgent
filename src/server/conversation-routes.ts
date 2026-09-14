@@ -31,10 +31,15 @@ export function registerConversationRoutes(server: FastifyInstance, context: App
     );
     return {
       conversation,
-      nodes,
+      nodes: nodes.map((node) => ({ ...node, metadata: {
+        ...node.metadata, executionDurationMs: context.runs.durationForNode(node.id),
+      } })),
       plans: context.plans.list(conversation.id),
       citations,
       traces,
+      activities: Object.fromEntries(nodes.map((node) => [
+        node.id, context.runs.listActivitiesForNode(node.id, traces[node.id] ?? []),
+      ])),
     };
   });
 

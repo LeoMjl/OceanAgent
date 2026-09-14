@@ -22,6 +22,12 @@ outputs/
 tmp/
 *.tgz
 *.zip
+demos/*/runs/
+demos/*/__pycache__/
+demos/*/_check_data.py
+demos/*/rehearsal-platform.json
+!demos/sst-analysis/data/
+!demos/sst-analysis/data/oisst-avhrr-v02r01.20190715.nc
 
 # Ocean-RAG is private; keep only the empty cards directory marker
 Ocean-RAG/cards/*

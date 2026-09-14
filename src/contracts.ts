@@ -126,6 +126,8 @@ export interface ToolTrace {
   detail?: string;
   startedAt: string;
   finishedAt?: string;
+  args?: unknown;
+  result?: unknown;
 }
 
 export interface PlanStep {
@@ -178,6 +180,7 @@ export interface StreamEvent<T = unknown> {
     | "run.started"
     | "run.progress"
     | "message.delta"
+    | "message.completed"
     | "tool.started"
     | "tool.progress"
     | "tool.completed"

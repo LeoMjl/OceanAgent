@@ -1,7 +1,8 @@
 import { randomUUID } from "node:crypto";
+import { SST_CASE_ID, SST_EXECUTION_INSTRUCTIONS, SST_PLANNING_INSTRUCTIONS } from "../server/research-case-routes.js";
 import { mkdir } from "node:fs/promises";
 import { resolve } from "node:path";
-import { SessionManager, type AgentSession } from "@earendil-works/pi-coding-agent";
+import { SessionManager, type AgentSession, type ToolDefinition } from "@earendil-works/pi-coding-agent";
 import type { AppConfig } from "../config.js";
 import type { ResearchPlan } from "../contracts.js";
 import { ConversationRepository } from "../db/conversation-repository.js";
@@ -20,6 +21,8 @@ import { OceanSessionFactory } from "./session-factory.js";
 import { ToolAwareIdleTimer } from "./tool-aware-idle-timer.js";
 import type { OceanToolContext, TerminalAction } from "./tool-context.js";
 import { createOceanTools, OCEAN_TOOL_NAMES } from "./tools/index.js";
+import { childToolNames, createSubagentTool } from "./tools/subagent.js";
+import { createCompleteResearchPlanTool } from "./tools/complete-research-plan.js";
 
 interface ActiveRun {
   conversationId: string;
@@ -103,7 +106,10 @@ export class OceanAgentRunner {
       ? userNode.metadata.approvedPlanId
       : undefined;
     const approvedPlan = approvedPlanId ? this.plans.get(approvedPlanId) : null;
+    const caseId = this.conversations.getBranch(run.conversationId, userNode.id)
+      .find((node) => node.metadata.researchCaseId === SST_CASE_ID)?.metadata.researchCaseId;
     let assistantText = "";
+    let messageId = randomUUID();
     const completedAssistantTexts: string[] = [];
     let lastAssistantStopReason: string | undefined;
     let lastAssistantError: string | undefined;
@@ -150,7 +156,25 @@ export class OceanAgentRunner {
       : `当前研究项目的本地操作目录是 ${cwd}。所有 read、bash、edit、write 文件操作都应限制在该目录中。`, false);
     const history = formatHistory(this.conversations.getBranch(run.conversationId, userNode.parentId));
     if (history) manager.appendCustomMessageEntry("oceanagent_history", `以下是当前会话分支的历史记录：\n\n${history}`, false);
-    const tools = createOceanTools(this.rag, this.webSearch, toolContext, this.config, remoteTarget);
+    const tools: ToolDefinition[] = createOceanTools(this.rag, this.webSearch, toolContext, this.config, remoteTarget);
+    const allowedChildTools = childToolNames(project.executionTarget === "ssh", Boolean(approvedPlan));
+    tools.push(createCompleteResearchPlanTool({
+      workspace: cwd, publicationRoot: resolve(this.config.rootDir, "data/artifacts"), runId,
+      approved: Boolean(approvedPlan), local: project.executionTarget === "local",
+      onComplete: () => { if (approvedPlanId) this.plans.updateStatus(approvedPlanId, "completed"); },
+    }));
+    tools.push(createSubagentTool({
+      factory: this.sessions, cwd, model: run.model,
+      toolNames: allowedChildTools,
+      tools: () => createOceanTools(this.rag, this.webSearch, toolContext, this.config, remoteTarget)
+        .filter((tool) => allowedChildTools.includes(tool.name)),
+      timeoutMs: Math.min(600_000, this.config.timeouts.hardMs),
+      projectContext: [
+        `当前项目目录：${project.workspacePath}；执行环境：${project.executionTarget === "ssh" ? "远程 Linux，只用 run_remote_command 执行远程操作" : "本地，Windows 使用 PowerShell"}。`,
+        approvedPlan ? `用户已批准科研规划：${JSON.stringify(approvedPlan)}。只执行分配给你的范围。`
+          : "当前子任务仅限读取文件、检索、核验与方法分析；计算执行及文件修改尚未授权给子任务。",
+      ].join("\n"),
+    }));
     const activeToolNames = project.executionTarget === "ssh" ? OCEAN_TOOL_NAMES : undefined;
     const { session } = await this.sessions.createSession(manager, tools, cwd, activeToolNames, run.model);
     const active: ActiveRun = { conversationId: run.conversationId, session };
@@ -190,11 +214,13 @@ export class OceanAgentRunner {
           idleTimer.touch();
         }
 
-        if (event.type === "message_update") {
+        if (event.type === "message_start" && event.message.role === "assistant") {
+          messageId = randomUUID();
+        } else if (event.type === "message_update") {
           const update = event.assistantMessageEvent;
           if (update.type === "text_delta") {
             assistantText += update.delta;
-            this.events.publish(runId, "message.delta", { delta: update.delta });
+            this.events.publish(runId, "message.delta", { delta: update.delta, messageId });
           } else if (update.type === "thinking_start") {
             publishProgress("正在推理下一步");
           } else if (update.type === "toolcall_start") {
@@ -204,6 +230,9 @@ export class OceanAgentRunner {
           }
         } else if (event.type === "message_end" && event.message.role === "assistant") {
           const completedText = extractAssistantText(event.message.content);
+          if (completedText.trim()) {
+            this.events.publish(runId, "message.completed", { text: completedText, messageId });
+          }
           if (completedText.trim()) completedAssistantTexts.push(completedText);
           lastAssistantStopReason = event.message.stopReason;
           lastAssistantError = event.message.errorMessage;
@@ -224,13 +253,18 @@ export class OceanAgentRunner {
           this.events.publish(runId, "tool.started", {
             id: event.toolCallId,
             name: event.toolName,
+            args: event.args,
             ...(detail ? { detail } : {}),
           });
         } else if (event.type === "tool_execution_update") {
-          this.events.publish(runId, "tool.progress", { id: event.toolCallId, name: event.toolName });
+          this.events.publish(runId, "tool.progress", {
+            id: event.toolCallId, name: event.toolName, result: event.partialResult,
+          });
         } else if (event.type === "tool_execution_end") {
           this.runs.finishToolCall(event.toolCallId, event.result, event.isError);
-          this.events.publish(runId, "tool.completed", { id: event.toolCallId, name: event.toolName, failed: event.isError });
+          this.events.publish(runId, "tool.completed", {
+            id: event.toolCallId, name: event.toolName, failed: event.isError, result: event.result,
+          });
           if (activeToolCalls.size === 0) publishProgress("正在分析工具结果");
         } else if (event.type === "auto_retry_start") {
           publishProgress("模型响应异常，正在自动重试");
@@ -251,7 +285,10 @@ export class OceanAgentRunner {
         "不得再次提出规划；避免重复询问，缺失的非关键参数使用显式假设。",
         "需要下载、代码运行或文件生成但当前工具无法完成的步骤，必须标记为待执行，不得声称已经完成。",
         `已批准规划：${JSON.stringify(approvedPlan)}`,
-      ].join("\n") : userNode.content;
+        ...(caseId === SST_CASE_ID ? [SST_EXECUTION_INSTRUCTIONS] : []),
+      ].join("\n") : [userNode.content,
+        ...(userNode.metadata.researchCaseId === SST_CASE_ID ? [SST_PLANNING_INSTRUCTIONS] : []),
+      ].join("\n");
       await session.prompt(prompt);
       const finalText = chooseAssistantText(completedAssistantTexts, assistantText);
       if (!terminalAction && !finalText && !active.abortReason) {

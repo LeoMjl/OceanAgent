@@ -1,6 +1,4 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import ReactMarkdown from "react-markdown";
-import remarkGfm from "remark-gfm";
 import type { Citation, ConfiguredModel, ConversationDetail, ModelReference } from "../api";
 import type { ResearchActivity } from "../useOceanAgent";
 import { activeBranch } from "../tree";
@@ -21,6 +19,7 @@ interface ChatPaneProps {
   selectedModel: ModelReference | null;
   onModelChange: (model: ModelReference) => void;
   onSend: (content: string) => void;
+  onSstCase: () => Promise<void>;
   onClarify: (nodeId: string, content: string) => void;
   onAbort: () => void;
 }
@@ -28,11 +27,12 @@ interface ChatPaneProps {
 const SUGGESTIONS = [
   "评估西北太平洋热带气旋路径预报所需的数据与方法",
   "为南海叶绿素浓度反演设计一套可执行的研究方案",
-  "检索海表温度异常与海洋热浪研究的常用数据集",
+  "南海海表温度与异常分析 · 查看方案并执行",
 ];
 
 export function ChatPane(props: ChatPaneProps) {
   const [draft, setDraft] = useState("");
+  const [caseLoading, setCaseLoading] = useState(false);
   const endRef = useRef<HTMLDivElement>(null);
   const canCompose = Boolean(props.detail || props.draftProjectTitle);
   const branch = useMemo(
@@ -91,8 +91,12 @@ export function ChatPane(props: ChatPaneProps) {
             <p>我会判断任务复杂度，按需检索 Ocean-RAG 与联网资料；复杂科研任务会先生成计划，等你确认后再执行。</p>
             <div className="suggestion-grid">
               {SUGGESTIONS.map((item, index) => (
-                <button key={item} type="button" disabled={!canCompose} onClick={() => send(item)}>
-                  <i>0{index + 1}</i><span>{item}</span><b>↗</b>
+                <button key={item} type="button" disabled={props.busy || caseLoading || (index !== 2 && !canCompose)} onClick={() => {
+                  if (index !== 2) { send(item); return; }
+                  setCaseLoading(true);
+                  void props.onSstCase().finally(() => setCaseLoading(false));
+                }}>
+                  <i>{index === 2 ? "案例" : `0${index + 1}`}</i><span>{index === 2 && caseLoading ? "正在检查案例数据…" : item}</span><b>↗</b>
                 </button>
               ))}
             </div>
@@ -105,6 +109,7 @@ export function ChatPane(props: ChatPaneProps) {
                 node={node}
                 citations={props.detail?.citations[node.id]}
                 traces={props.detail?.traces[node.id]}
+                activities={props.detail?.activities?.[node.id]}
               />
             ))}
             {props.busy && (
@@ -113,9 +118,6 @@ export function ChatPane(props: ChatPaneProps) {
                 <div className="assistant-message">
                   <div className="message-author"><b>OceanAgent</b><span className="thinking">正在研究</span></div>
                   <ResearchTrace activities={props.activities} citations={props.liveCitations} live />
-                  {props.streamingText ? (
-                    <div className="markdown-body"><ReactMarkdown remarkPlugins={[remarkGfm]}>{props.streamingText}</ReactMarkdown></div>
-                  ) : null}
                 </div>
               </article>
             )}

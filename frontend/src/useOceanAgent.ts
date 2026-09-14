@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
+import { reduceRunTimeline, type RunActivity } from "../../src/run-timeline";
 import {
   api,
   streamRun,
@@ -15,16 +16,11 @@ import {
   type StreamEvent,
 } from "./api";
 
-export interface ResearchActivity {
-  id: string;
-  toolName?: string;
-  label: string;
-  detail?: string;
-  status: "running" | "completed" | "failed";
-  createdAt: string;
-}
+export type ResearchActivity = RunActivity;
 
 const TOOL_LABELS: Record<string, string> = {
+  subagent: "科研子智能体协作",
+  complete_research_plan: "核验并交付科研产物",
   read: "读取科研文件",
   bash: "运行科研计算命令",
   run_remote_command: "运行远程科研命令",
@@ -239,70 +235,21 @@ export function useOceanAgent() {
   }, [selectedId, refreshDetail]);
 
   const handleEvent = useCallback((event: StreamEvent) => {
+    setActivities((items) => reduceRunTimeline(items, event));
     if (event.type === "run.started") {
-      setActivities([{
-        id: `run-${event.runId}`,
-        label: "分析研究问题并选择知识来源",
-        status: "completed",
-        createdAt: event.createdAt,
-      }]);
+      setRunStatus("正在分析研究问题");
     } else if (event.type === "run.progress") {
       const progress = eventData<{ label: string; detail?: string }>(event);
       setRunStatus(progress.label);
-      setActivities((items) => [
-        ...items.filter((item) => item.id !== `agent-${event.runId}`),
-        {
-          id: `agent-${event.runId}`,
-          label: progress.label,
-          detail: progress.detail,
-          status: "running",
-          createdAt: event.createdAt,
-        },
-      ]);
     } else if (event.type === "message.delta") {
       setStreamingText((value) => value + eventData<{ delta: string }>(event).delta);
     } else if (event.type === "tool.started") {
       const tool = eventData<{ id: string; name: string; detail?: string }>(event);
       const label = toolLabel(tool.name);
       setRunStatus(label);
-      setActivities((items) => [
-        ...items.filter((item) => (
-          item.id !== `agent-${event.runId}`
-          && item.id !== tool.id
-          && !(item.toolName === tool.name && item.status === "failed")
-        )),
-        {
-          id: tool.id,
-          toolName: tool.name,
-          label,
-          detail: tool.detail,
-          status: "running",
-          createdAt: event.createdAt,
-        },
-      ]);
-    } else if (event.type === "tool.progress") {
-      const tool = eventData<{ id: string; name: string }>(event);
-      setActivities((items) => items.map((item) => item.id === tool.id
-        ? { ...item, status: "running" }
-        : item));
-    } else if (event.type === "tool.completed") {
-      const tool = eventData<{ id: string; name: string; failed: boolean }>(event);
-      setActivities((items) => items.map((item) => item.id === tool.id
-        ? { ...item, status: tool.failed ? "failed" : "completed" }
-        : item));
     } else if (event.type === "citation.added") {
       const citation = eventData<Citation>(event);
       setLiveCitations((items) => items.some((item) => item.sourceId === citation.sourceId) ? items : [...items, citation]);
-      setActivities((items) => items.some((item) => item.id === `source-${citation.sourceId}`) ? items : [
-        ...items,
-        {
-          id: `source-${citation.sourceId}`,
-          label: "收录可追溯证据",
-          detail: citation.title,
-          status: "completed",
-          createdAt: event.createdAt,
-        },
-      ]);
     } else if (event.type === "clarification.requested") {
       setRunStatus("等待补充研究参数");
     } else if (event.type === "plan.proposed") {
@@ -310,9 +257,6 @@ export function useOceanAgent() {
       setRunStatus("科研规划已生成，等待确认");
     } else if (event.type === "run.settled" || event.type === "run.error") {
       setRunStatus(event.type === "run.settled" ? "已完成" : "运行结束");
-      setActivities((items) => items.map((item) => item.status === "running"
-        ? { ...item, status: event.type === "run.settled" ? "completed" : "failed" }
-        : item));
       setRunId(null);
       setStreamingText("");
       const conversationId = streamConversationId.current;
@@ -434,11 +378,30 @@ export function useOceanAgent() {
 
   useEffect(() => () => closeStream.current?.(), []);
 
+  const activateSstCase = useCallback(async () => {
+    if (runId) return;
+    setError(null);
+    try {
+      const result = await api.activateSstCase(selectedModel);
+      await refreshWorkspace();
+      selectConversation(result.conversationId);
+      await refreshDetail(result.conversationId);
+      streamConversationId.current = result.conversationId;
+      setRunId(result.run.id);
+      setRunStatus("正在调查数据并制定方案");
+      closeStream.current = streamRun(result.eventsUrl, handleEvent, () => {
+        setError("研究准备事件连接中断，可刷新查看已保存过程。");
+      });
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : String(cause));
+    }
+  }, [runId, selectedModel, refreshWorkspace, selectConversation, refreshDetail, handleEvent]);
+
   return {
     projects, remoteConnections, modelSettings, selectedModel, conversations, selectedId, draftProjectId, detail, streamingText, liveCitations, livePlan,
     activities, runId, runStatus, ragDocumentCount, ragStatus, error,
     selectConversation, startDraftConversation, createProject, selectLocalDirectory, connectProject, renameProject, renameConversation,
     discoverProviderModels, saveProviderModels, chooseModel,
-    deleteProject, deleteConversation, sendMessage, submitClarification, selectNode, abortRun, updatePlan,
+    deleteProject, deleteConversation, sendMessage, submitClarification, selectNode, abortRun, updatePlan, activateSstCase,
   };
 }

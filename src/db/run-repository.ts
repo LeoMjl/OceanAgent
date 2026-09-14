@@ -2,6 +2,7 @@ import { randomUUID } from "node:crypto";
 import type { AgentRun, Citation, RunStatus, StreamEvent, ToolTrace } from "../contracts.js";
 import { redactSensitiveValues, redactSerializedJson } from "../security/redact-secrets.js";
 import { OceanDatabase } from "./database.js";
+import { restoreRunTimeline, type RunActivity } from "../run-timeline.js";
 
 type Row = Record<string, unknown>;
 
@@ -154,19 +155,30 @@ export class RunRepository {
       JOIN runs ON runs.id = tool_calls.run_id
       WHERE runs.assistant_node_id = ? ORDER BY tool_calls.started_at ASC
     `).all(nodeId) as Row[];
-    return rows
-      .filter((row, index) => !(row.status === "failed" && rows.slice(index + 1).some(
-        (later) => later.tool_name === row.tool_name && later.status === "completed",
-      )))
-      .map((row) => ({
+    return rows.map((row) => ({
         id: String(row.id),
         runId: String(row.run_id),
         name: String(row.tool_name),
         status: String(row.status) as ToolTrace["status"],
         detail: toolDetail(row.args_json),
+        args: JSON.parse(String(row.args_json ?? "null")),
+        result: JSON.parse(String(row.result_json ?? "null")),
         startedAt: String(row.started_at),
         finishedAt: row.finished_at ? String(row.finished_at) : undefined,
       }));
+  }
+
+  listActivitiesForNode(nodeId: string, traces: ToolTrace[]): RunActivity[] {
+    const row = this.db.raw.prepare("SELECT id FROM runs WHERE assistant_node_id = ?")
+      .get(nodeId) as Row | undefined;
+    return row ? restoreRunTimeline(this.listEvents(String(row.id)), traces) : [];
+  }
+
+  durationForNode(nodeId: string): number | undefined {
+    const row = this.db.raw.prepare("SELECT started_at, created_at, settled_at FROM runs WHERE assistant_node_id = ?")
+      .get(nodeId) as Row | undefined;
+    if (!row?.settled_at) return undefined;
+    return Math.max(0, Date.parse(String(row.settled_at)) - Date.parse(String(row.started_at ?? row.created_at)));
   }
 
   startToolCall(runId: string, id: string, name: string, args: unknown): void {

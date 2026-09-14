@@ -1,4 +1,7 @@
 import { existsSync } from "node:fs";
+import { resolve } from "node:path";
+import { registerArtifactRoutes } from "./server/artifact-routes.js";
+import { registerResearchCaseRoutes } from "./server/research-case-routes.js";
 import fastifyStatic from "@fastify/static";
 import cors from "@fastify/cors";
 import Fastify from "fastify";
@@ -34,7 +37,9 @@ registerConversationRoutes(server, context);
 registerProjectRoutes(server, context);
 registerRunRoutes(server, context);
 registerPlanRoutes(server, context);
+registerResearchCaseRoutes(server, context);
 registerModelSettingsRoutes(server, context);
+registerArtifactRoutes(server, resolve(context.config.rootDir, "data/artifacts"));
 
 if (existsSync(context.config.frontendDist)) {
   await server.register(fastifyStatic, {

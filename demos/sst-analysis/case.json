@@ -1,0 +1,18 @@
+{
+  "id": "south-china-sea-sst-20190715",
+  "title": "南海单日海表温度与距平分析",
+  "date": "2019-07-15",
+  "bbox": [105, 125, 5, 25],
+  "source_file": "oisst-avhrr-v02r01.20190715.nc",
+  "source_url": "https://www.ncei.noaa.gov/data/sea-surface-temperature-optimum-interpolation/v2.1/access/avhrr/201907/oisst-avhrr-v02r01.20190715.nc",
+  "documentation": "https://www.ncei.noaa.gov/products/optimum-interpolation-sst",
+  "baseline": "1971–2000 OI.v2 SST climatology (NOAA supplied anom)",
+  "warm_threshold_c": 1.0,
+  "limitations": [
+    "本例分析南海及邻近海域的矩形窗口，不是严格海盆边界。",
+    "仅分析一个日期，不能据此认定海洋热浪或长期变暖趋势。",
+    "距平使用NOAA提供的anom变量，不以当日区域平均温度代替气候基线。",
+    "采用cos(latitude)面积权重；陆地及缺测值从统计分母中剔除。",
+    "阈值大于1°C仅为本演示的暖距平描述阈值，不是海洋热浪阈值。"
+  ]
+}

@@ -176,4 +176,26 @@ describe("SQLite repositories", () => {
 
     expect(runs.listToolTracesForNode(assistant.id)[0]?.detail).toContain("查询 D0601");
   });
+
+  it("restores the visible timeline with complete commands, results and failed attempts", () => {
+    const conversation = conversations.create("命令时间线");
+    const user = conversations.addNode({ conversationId: conversation.id, role: "user", content: "检查文件" });
+    const assistant = conversations.addNode({ conversationId: conversation.id, parentId: user.id, role: "assistant", content: "完成" });
+    const runs = new RunRepository(database);
+    const run = runs.create(conversation.id, user.id, "test-model");
+    const command = "Write-Output '" + "完整命令".repeat(100) + "'";
+    for (const id of ["failed-attempt", "retry"]) {
+      runs.startToolCall(run.id, id, "bash", { command, apiKey: "test-secret" });
+      runs.appendEvent({ runId: run.id, type: "tool.started", data: { id, name: "bash" }, createdAt: new Date().toISOString() });
+      runs.finishToolCall(id, { content: [{ type: "text", text: id }], token: "test-secret" }, id === "failed-attempt");
+    }
+    runs.update(run.id, { status: "settled", assistantNodeId: assistant.id });
+    const traces = runs.listToolTracesForNode(assistant.id);
+    const timeline = runs.listActivitiesForNode(assistant.id, traces);
+    expect(timeline.map((item) => item.status)).toEqual(["failed", "completed"]);
+    expect(timeline[1]?.args).toMatchObject({ command });
+    expect(timeline[1]?.result).toMatchObject({ content: [{ text: "retry" }] });
+    expect(JSON.stringify(timeline)).not.toContain("test-secret");
+    expect(runs.listActivitiesForNode(user.id, [])).toEqual([]);
+  });
 });
